@@ -48,6 +48,7 @@ async function report(status, logMsg, extra = {}) {
         task_id: +TASK_ID || extra.task_id || 0,
         status, log: logMsg, worker_id: WORKER_ID,
         instance_id: extra.instance_id || "",
+        instance_name: extra.instance_name || "",
         public_ip: extra.public_ip || "",
         private_ip: extra.private_ip || "",
       }),
@@ -286,7 +287,7 @@ class Oci {
     const body = {
       compartmentId: this.compartment,
       availabilityDomain: ad,
-      displayName: /A1/.test(task.shape) ? `ARM-${mmdd()}` : `AMD-${mmdd()}`,
+      displayName: task._displayName || (/A1/.test(task.shape) ? `ARM-${mmdd()}` : `AMD-${mmdd()}`),
       shape: task.shape,
       sourceDetails: { sourceType: "image", imageId, bootVolumeSizeInGBs: task.disk_size },
       createVnicDetails: { subnetId, assignPublicIp: true },
@@ -410,6 +411,7 @@ async function main() {
           await oci.ensureRouteTable(vcn.defaultRouteTableId, igw.id);
           await oci.ensureSecurityList(vcn.defaultSecurityListId);
           const subnet = await oci.findOrCreateSubnet(vcn.id, `oci-manager-subnet-${task.tenant_id}`, "10.0.0.0/24", ad);
+          task._displayName = /A1/.test(task.shape) ? `ARM-${mmdd()}` : `AMD-${mmdd()}`;
           const inst = await oci.launch(task, image.id, subnet.id, ad);
           log(`LAUNCHED ${inst.id} @${ad}`);
 
@@ -420,8 +422,8 @@ async function main() {
             try { ips = await oci.publicIps(inst.id); } catch {}
             if (ips.publicIp) break;
           }
-          await report("success", `Instance created: ${inst.id}`, {
-            task_id: task.task_id, instance_id: inst.id,
+          await report("success", `Instance created: ${task._displayName}`, {
+            task_id: task.task_id, instance_id: inst.id, instance_name: task._displayName,
             public_ip: ips.publicIp || "", private_ip: ips.privateIp || "",
           });
           log(`DONE ip=${ips.publicIp || "?"}/${ips.privateIp || "?"}`);
