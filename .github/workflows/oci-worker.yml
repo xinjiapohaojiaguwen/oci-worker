@@ -1,47 +1,39 @@
-name: OCI Worker (Public)
+name: OCI Worker
 
 on:
   workflow_dispatch:
     inputs:
       task_id:
         description: 'Task ID to execute'
-        required: false
+        required: true
         type: string
-  schedule:
-    - cron: '*/5 * * * *' # Backup polling (every 5 min)
+      server_url:
+        description: 'Panel base URL'
+        required: true
+        type: string
+      worker_token:
+        description: 'One-time task-scoped worker token'
+        required: true
+        type: string
 
 jobs:
   worker:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Download Worker
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # worker 二进制 release 在本仓库 — 内置 GITHUB_TOKEN 即可下载
           gh release download worker-build -R ${{ github.repository }} -p "oci-manager-worker-linux-amd64" --clobber
           mv oci-manager-worker-linux-amd64 oci-manager
           chmod +x oci-manager
 
-      - name: Check Connectivity
-        env:
-          OCI_SERVER_URL: ${{ secrets.OCI_SERVER_URL }}
-        run: |
-          echo "Checking connectivity to $OCI_SERVER_URL..."
-          curl -fsS -o /dev/null -w "%{http_code}\n" "$OCI_SERVER_URL/health" || echo "Warning: Connectivity check failed"
-
       - name: Run Worker
         env:
-          OCI_SERVER_URL: ${{ secrets.OCI_SERVER_URL }}
-          OCI_WORKER_TOKEN: ${{ secrets.OCI_WORKER_TOKEN }}
+          OCI_SERVER_URL: ${{ inputs.server_url }}
+          OCI_WORKER_TOKEN: ${{ inputs.worker_token }}
           TASK_ID: ${{ inputs.task_id }}
         run: |
-          CMD="./oci-manager worker --server-url \"$OCI_SERVER_URL\" --token \"$OCI_WORKER_TOKEN\""
-          if [ ! -z "$TASK_ID" ]; then
-            CMD="$CMD --task-id \"$TASK_ID\""
-            echo "Starting worker for specific Task ID: $TASK_ID"
-          fi
-          timeout 350m sh -c "$CMD" || true
+          echo "Task $TASK_ID -> $OCI_SERVER_URL"
+          curl -fsS -o /dev/null -w "health: %{http_code}\n" "$OCI_SERVER_URL/health" || echo "Warning: connectivity check failed"
+          timeout 350m ./oci-manager worker --server-url "$OCI_SERVER_URL" --token "$OCI_WORKER_TOKEN" --task-id "$TASK_ID" || true
