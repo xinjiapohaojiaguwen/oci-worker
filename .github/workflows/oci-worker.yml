@@ -33,6 +33,7 @@ jobs:
           OCI_SERVER_URL: ${{ inputs.server_url }}
           OCI_WORKER_TOKEN: ${{ inputs.worker_token }}
           TASK_ID: ${{ inputs.task_id }}
+          OCI_MANAGER_ENABLE_LEGACY_INLINE_OCI_KEYS: "true"  # worker 需要内联 OCI 私钥执行抢机
         run: |
           echo "Task $TASK_ID -> $OCI_SERVER_URL"
           curl -fsS -o /dev/null -w "health: %{http_code}\n" "$OCI_SERVER_URL/health" || echo "Warning: connectivity check failed"
