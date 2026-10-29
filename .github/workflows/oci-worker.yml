@@ -20,21 +20,16 @@ jobs:
   worker:
     runs-on: ubuntu-latest
     steps:
-      - name: Download Worker
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release download worker-build -R ${{ github.repository }} -p "oci-manager-worker-linux-amd64" --clobber
-          mv oci-manager-worker-linux-amd64 oci-manager
-          chmod +x oci-manager
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Run Worker
+      - name: Run Worker (Node)
         env:
           OCI_SERVER_URL: ${{ inputs.server_url }}
           OCI_WORKER_TOKEN: ${{ inputs.worker_token }}
           TASK_ID: ${{ inputs.task_id }}
-          OCI_MANAGER_ENABLE_LEGACY_INLINE_OCI_KEYS: "true"  # worker 需要内联 OCI 私钥执行抢机
         run: |
+          node --version
           echo "Task $TASK_ID -> $OCI_SERVER_URL"
           curl -fsS -o /dev/null -w "health: %{http_code}\n" "$OCI_SERVER_URL/health" || echo "Warning: connectivity check failed"
-          timeout 350m ./oci-manager worker --server-url "$OCI_SERVER_URL" --token "$OCI_WORKER_TOKEN" --task-id "$TASK_ID" || true
+          timeout 340m node worker/grab.mjs || true
