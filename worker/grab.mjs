@@ -6,7 +6,7 @@
  *   GET  {SERVER}/api/v1/worker/task?worker_id=X[&task_id=N]   X-Worker-Token
  *   POST {SERVER}/api/v1/worker/report                          X-Worker-Token
  *
- * env: OCI_SERVER_URL / OCI_WORKER_TOKEN / TASK_ID
+ * env: OCI_SERVER_URL / BOOTSTRAP_CODE / TASK_ID
  */
 import net from "node:net";
 import tls from "node:tls";
@@ -379,7 +379,7 @@ const rand = (min, max) => min + Math.random() * (max - min);
 
 // ================= 主循环 =================
 async function main() {
-  log(`worker ${WORKER_ID} start, task=${TASK_ID || "(poll)"}, server=${SERVER}`);
+  log(`worker ${WORKER_ID} start, task=${TASK_ID || "(poll)"}`);
   await bootstrap();
 
   // 拉任务 (允许面板侧 running 传播延迟)

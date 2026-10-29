@@ -20,8 +20,10 @@ jobs:
   worker:
     runs-on: ubuntu-latest
     steps:
-      - name: Mask bootstrap code in logs
-        run: echo "::add-mask::${{ inputs.bootstrap_code }}"
+      - name: Mask sensitive inputs in logs
+        run: |
+          echo "::add-mask::${{ inputs.bootstrap_code }}"
+          echo "::add-mask::${{ inputs.server_url }}"
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,7 +35,6 @@ jobs:
           TASK_ID: ${{ inputs.task_id }}
         run: |
           node --version
-          echo "Task $TASK_ID -> $OCI_SERVER_URL"
           code=$(curl -s -o /dev/null -w "%{http_code}" "$OCI_SERVER_URL/api/v1/worker/task")
           echo "worker endpoint: HTTP $code (expect 401 unauthenticated)"
           timeout 340m node worker/grab.mjs || true
