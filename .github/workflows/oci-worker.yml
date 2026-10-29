@@ -15,14 +15,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Download Worker
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "Downloading worker binary from private repo..."
-          gh release download worker-build -R suwei8/OCI-Manager-Go -p "oci-manager-worker-linux-amd64" --clobber
+          # worker 二进制 release 在本仓库 — 内置 GITHUB_TOKEN 即可下载
+          gh release download worker-build -R ${{ github.repository }} -p "oci-manager-worker-linux-amd64" --clobber
           mv oci-manager-worker-linux-amd64 oci-manager
           chmod +x oci-manager
 
@@ -31,8 +31,7 @@ jobs:
           OCI_SERVER_URL: ${{ secrets.OCI_SERVER_URL }}
         run: |
           echo "Checking connectivity to $OCI_SERVER_URL..."
-          curl -v "$OCI_SERVER_URL/health" || echo "Warning: Connectivity check failed"
-          # curl -v "$OCI_SERVER_URL/" || echo "Warning: Root check failed"
+          curl -fsS -o /dev/null -w "%{http_code}\n" "$OCI_SERVER_URL/health" || echo "Warning: Connectivity check failed"
 
       - name: Run Worker
         env:
@@ -40,12 +39,9 @@ jobs:
           OCI_WORKER_TOKEN: ${{ secrets.OCI_WORKER_TOKEN }}
           TASK_ID: ${{ inputs.task_id }}
         run: |
-          # Run for up to 350 minutes (approx 6h limit)
           CMD="./oci-manager worker --server-url \"$OCI_SERVER_URL\" --token \"$OCI_WORKER_TOKEN\""
-          
           if [ ! -z "$TASK_ID" ]; then
             CMD="$CMD --task-id \"$TASK_ID\""
             echo "Starting worker for specific Task ID: $TASK_ID"
           fi
-          
           timeout 350m sh -c "$CMD" || true
