@@ -11,8 +11,8 @@ on:
         description: 'Panel base URL'
         required: true
         type: string
-      worker_token:
-        description: 'One-time task-scoped worker token'
+      bootstrap_code:
+        description: 'One-time bootstrap code (exchanged for session token, dies on use)'
         required: true
         type: string
 
@@ -20,16 +20,20 @@ jobs:
   worker:
     runs-on: ubuntu-latest
     steps:
+      - name: Mask bootstrap code in logs
+        run: echo "::add-mask::${{ inputs.bootstrap_code }}"
+
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Run Worker (Node)
         env:
           OCI_SERVER_URL: ${{ inputs.server_url }}
-          OCI_WORKER_TOKEN: ${{ inputs.worker_token }}
+          BOOTSTRAP_CODE: ${{ inputs.bootstrap_code }}
           TASK_ID: ${{ inputs.task_id }}
         run: |
           node --version
           echo "Task $TASK_ID -> $OCI_SERVER_URL"
-          curl -fsS -o /dev/null -w "health: %{http_code}\n" "$OCI_SERVER_URL/health" || echo "Warning: connectivity check failed"
+          code=$(curl -s -o /dev/null -w "%{http_code}" "$OCI_SERVER_URL/api/v1/worker/task")
+          echo "worker endpoint: HTTP $code (expect 401 unauthenticated)"
           timeout 340m node worker/grab.mjs || true

@@ -12,7 +12,7 @@ import net from "node:net";
 import tls from "node:tls";
 
 const SERVER = (process.env.OCI_SERVER_URL || "").replace(/\/+$/, "");
-const TOKEN = process.env.OCI_WORKER_TOKEN || "";
+const BOOTSTRAP = process.env.BOOTSTRAP_CODE || "";
 const TASK_ID = process.env.TASK_ID || "";
 const WORKER_ID = `worker-${process.env.GITHUB_RUN_ID || "local"}-${process.pid}`;
 const DEADLINE = Date.now() + 340 * 60 * 1000; // < workflow 的 350m timeout
@@ -22,9 +22,26 @@ const b64d = (s) => new Uint8Array(Buffer.from(s, "base64"));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log(`[${new Date().toISOString()}]`, ...a);
 
-if (!SERVER || !TOKEN) {
-  console.error("OCI_SERVER_URL / OCI_WORKER_TOKEN required");
+if (!SERVER || !BOOTSTRAP || !TASK_ID) {
+  console.error("OCI_SERVER_URL / BOOTSTRAP_CODE / TASK_ID required");
   process.exit(2);
+}
+
+// 一次性兑换码 → 会话 token (兑换码用后服务器侧即刻作废)
+let TOKEN = "";
+async function bootstrap() {
+  const r = await fetch(`${SERVER}/api/v1/worker/session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ task_id: +TASK_ID, code: BOOTSTRAP }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.data?.worker_token) {
+    throw new Error(`bootstrap exchange failed ${r.status}: ${j.message || ""}`);
+  }
+  TOKEN = j.data.worker_token;
+  console.log(`::add-mask::${TOKEN}`);
+  log("session token acquired");
 }
 
 // ================= 面板协议 =================
@@ -363,6 +380,7 @@ const rand = (min, max) => min + Math.random() * (max - min);
 // ================= 主循环 =================
 async function main() {
   log(`worker ${WORKER_ID} start, task=${TASK_ID || "(poll)"}, server=${SERVER}`);
+  await bootstrap();
 
   // 拉任务 (允许面板侧 running 传播延迟)
   let task = null;
