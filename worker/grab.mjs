@@ -57,6 +57,7 @@ async function getTask() {
 }
 
 async function report(status, logMsg, extra = {}) {
+  log(`report[${status}] ${logMsg.slice(0, 160)}`);
   try {
     await fetch(`${SERVER}/api/v1/worker/report`, {
       method: "POST",
