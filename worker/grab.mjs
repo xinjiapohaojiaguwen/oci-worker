@@ -15,7 +15,7 @@ const SERVER = (process.env.OCI_SERVER_URL || "").replace(/\/+$/, "");
 const BOOTSTRAP = process.env.BOOTSTRAP_CODE || "";
 const TASK_ID = process.env.TASK_ID || "";
 const WORKER_ID = `worker-${process.env.GITHUB_RUN_ID || "local"}-${process.pid}`;
-const DEADLINE = Date.now() + 340 * 60 * 1000; // < workflow 的 350m timeout
+const DEADLINE = Date.now() + 330 * 60 * 1000; // < 外层 timeout 340m, 留窗口保证能 report("stopped")
 
 const b64e = (u8) => Buffer.from(u8).toString("base64");
 const b64d = (s) => new Uint8Array(Buffer.from(s, "base64"));
@@ -380,6 +380,14 @@ const rand = (min, max) => min + Math.random() * (max - min);
 // ================= 主循环 =================
 async function main() {
   log(`worker ${WORKER_ID} start, task=${TASK_ID || "(poll)"}`);
+  // 被外层 timeout SIGTERM 时尽力报一次 stopped, 避免面板任务挂 running
+  let sigHandled = false;
+  process.on("SIGTERM", () => {
+    if (sigHandled) return;
+    sigHandled = true;
+    Promise.race([report("stopped", "worker killed (SIGTERM)", { task_id: +TASK_ID || undefined }), sleep(8000)])
+      .finally(() => process.exit(143));
+  });
   await bootstrap();
 
   // 拉任务 (允许面板侧 running 传播延迟)
@@ -465,7 +473,8 @@ async function main() {
         ? `429 rate limited, backoff ${waitSec}s`
         : `抢机失败: ${errs.join(" | ").slice(0, 300)}; 第${attempt}次, ${Math.round(waitSec)}s后重试`;
       await report("running", msg, { task_id: task.task_id });
-      await sleep(waitSec * 1000);
+      // sleep 截断到 DEADLINE, 防止一觉睡过头没机会报 stopped
+      await sleep(Math.min(waitSec * 1000, Math.max(0, DEADLINE - Date.now())));
     } catch (e) {
       if (isFatal(e.message)) {
         await report("failed", `fatal: ${e.message.slice(0, 200)}`, { task_id: task.task_id });
